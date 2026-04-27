@@ -114,59 +114,63 @@ async function main() {
             continue;
           }
 
-          const { data: repo } = await octokit.rest.repos.get({
-            owner: item.repository.owner.login,
-            repo: item.repository.name,
-          });
+          try {
+            const { data: repo } = await octokit.rest.repos.get({
+              owner: item.repository.owner.login,
+              repo: item.repository.name,
+            });
 
-          const { data: commits } = await octokit.rest.repos.listCommits({
-            owner: repo.owner.login,
-            repo: repo.name,
-            path: item.path,
-            per_page: 50,
-          });
+            const { data: commits } = await octokit.rest.repos.listCommits({
+              owner: repo.owner.login,
+              repo: repo.name,
+              path: item.path,
+              per_page: 50,
+            });
 
-          // attempt to find the commit that adopted FSS
-          const adoptedCommit = [...commits].reverse().find(({ commit }) =>
-            commit.message.match(
-              /fsl|functional source|fcl|fair core|busl|fair source|fss/i,
-            ),
-          );
+            // attempt to find the commit that adopted FSS
+            const adoptedCommit = [...commits].reverse().find(({ commit }) =>
+              commit.message.match(
+                /fsl|functional source|fcl|fair core|busl|fair source|fss/i,
+              ),
+            );
 
-          const { commit } = adoptedCommit || commits[0];
-          const adoptedAt = new Date(commit.author!.date!);
-          const changeAt = addYears(adoptedAt, OSS_AFTER);
+            const { commit } = adoptedCommit || commits[0];
+            const adoptedAt = new Date(commit.author!.date!);
+            const changeAt = addYears(adoptedAt, OSS_AFTER);
 
-          // normalize identifers (e.g. XXX-Apache-2.0 is now XXX-ALv2)
-          let normalizedSpdxLicense = spdxLicense;
-          let normalizedFssLicense = fssLicense;
-          let normalizedOssLicense = ossLicense;
+            // normalize identifiers (e.g. XXX-Apache-2.0 is now XXX-ALv2)
+            let normalizedSpdxLicense = spdxLicense;
+            let normalizedFssLicense = fssLicense;
+            let normalizedOssLicense = ossLicense;
 
-          switch (ossLicense) {
-            case OpenSourceLicenseIdentifier.Apache2x0:
-              normalizedSpdxLicense =
-                `${fssLicense}-${OpenSourceLicenseIdentifier.ALv2}` as SpdxLicenseIdentifier;
+            switch (ossLicense) {
+              case OpenSourceLicenseIdentifier.Apache2x0:
+                normalizedSpdxLicense =
+                  `${fssLicense}-${OpenSourceLicenseIdentifier.ALv2}` as SpdxLicenseIdentifier;
 
-              break;
-            case OpenSourceLicenseIdentifier.ALv2:
-              normalizedOssLicense = OpenSourceLicenseIdentifier.Apache2x0;
+                break;
+              case OpenSourceLicenseIdentifier.ALv2:
+                normalizedOssLicense = OpenSourceLicenseIdentifier.Apache2x0;
 
-              break;
+                break;
+            }
+
+            repos[repo.html_url] = {
+              repo_id: repo.id,
+              repo_name: repo.name,
+              repo_org: repo.owner.login,
+              repo_url: repo.html_url,
+              repo_stars: repo.stargazers_count,
+              license_url: item.html_url,
+              license_spdx: normalizedSpdxLicense,
+              license_fss: normalizedFssLicense,
+              license_oss: normalizedOssLicense,
+              fss_at: adoptedAt,
+              oss_at: changeAt,
+            };
+          } catch (error) {
+            console.error(`Error at ${item.repository.owner.login}/${item.repository.name}: ${error}`);
           }
-
-          repos[repo.html_url] = {
-            repo_id: repo.id,
-            repo_name: repo.name,
-            repo_org: repo.owner.login,
-            repo_url: repo.html_url,
-            repo_stars: repo.stargazers_count,
-            license_url: item.html_url,
-            license_spdx: normalizedSpdxLicense,
-            license_fss: normalizedFssLicense,
-            license_oss: normalizedOssLicense,
-            fss_at: adoptedAt,
-            oss_at: changeAt,
-          };
         }
       }
     }
